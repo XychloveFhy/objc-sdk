@@ -17,7 +17,7 @@
 #import "QNStats.h"
 
 @interface QNHttpManager ()
-@property (nonatomic) AFHTTPRequestOperationManager *httpManager;
+@property (nonatomic) AFHTTPSessionManager *httpManager;
 @property UInt32 timeout;
 @property (nonatomic, strong) QNUrlConvert converter;
 @property (nonatomic) QNDnsManager *dns;
@@ -32,14 +32,17 @@ static NSURL *buildUrl(NSString *host, NSNumber *port, NSString *path){
 	return [[NSURL alloc] initWithString:p];
 }
 
-static BOOL needRetry(AFHTTPRequestOperation *op, NSError *error){
+static BOOL needRetry(NSURLSessionTask *op, NSError *error){
+    
+    NSHTTPURLResponse *response = (NSHTTPURLResponse *)op.response;
+    
 	if (error != nil) {
 		return error.code < -1000;
 	}
 	if (op == nil) {
 		return YES;
 	}
-	int status = (int)[op.response statusCode];
+	int status = (int)[response statusCode];
 	return status >= 500 && status < 600 && status != 579;
 }
 
@@ -50,7 +53,7 @@ static BOOL needRetry(AFHTTPRequestOperation *op, NSError *error){
                 upStatsDropRate:(float)dropRate
                             dns:(QNDnsManager *)dns {
 	if (self = [super init]) {
-		_httpManager = [[AFHTTPRequestOperationManager alloc] init];
+        _httpManager = [AFHTTPSessionManager manager];
 		_httpManager.responseSerializer = [AFJSONResponseSerializer serializer];
 		_timeout = timeout;
 		_converter = converter;
@@ -65,17 +68,18 @@ static BOOL needRetry(AFHTTPRequestOperation *op, NSError *error){
 	return [self initWithTimeout:60 urlConverter:nil upStatsDropRate:-1 dns:nil];
 }
 
-+ (QNResponseInfo *)buildResponseInfo:(AFHTTPRequestOperation *)operation
++ (QNResponseInfo *)buildResponseInfo:(NSURLSessionTask *)operation
                             withError:(NSError *)error
                          withDuration:(double)duration
                          withResponse:(id)responseObject
                                withIp:(NSString *)ip {
 	QNResponseInfo *info;
-	NSString *host = operation.request.URL.host;
+	NSString *host = operation.originalRequest.URL.host;
 
 	if (operation.response) {
-		int status =  (int)[operation.response statusCode];
-		NSDictionary *headers = [operation.response allHeaderFields];
+        NSHTTPURLResponse *response = (NSHTTPURLResponse *)operation.response;
+		int status =  (int)[response statusCode];
+		NSDictionary *headers = [response allHeaderFields];
 		NSString *reqId = headers[@"X-Reqid"];
 		NSString *xlog = headers[@"X-Log"];
 		NSString *xvia = headers[@"X-Via"];
@@ -160,63 +164,56 @@ static BOOL needRetry(AFHTTPRequestOperation *op, NSError *error){
 
 	[request setValue:[[QNUserAgent sharedInstance] description] forHTTPHeaderField:@"User-Agent"];
 	[request setValue:nil forHTTPHeaderField:@"Accept-Language"];
-
-
-	AFHTTPRequestOperation *operation = [_httpManager
-	                                     HTTPRequestOperationWithRequest:request
-	                                     success: ^(AFHTTPRequestOperation *operation, id responseObject) {
-	                                             double duration = [[NSDate date] timeIntervalSinceDate:startTime];
-	                                             QNResponseInfo *info = [QNHttpManager buildResponseInfo:operation withError:nil withDuration:duration withResponse:operation.responseData withIp:ip];
-	                                             NSDictionary *resp = nil;
-	                                             if (info.isOK) {
-	                                                     resp = responseObject;
-						     }
-	                                             [self recordRst:stats response:operation.response error:nil st:st];
-	                                             completeBlock(info, resp);
-					     }                                                                failure: ^(AFHTTPRequestOperation *operation, NSError *error) {
-	                                             [self recordRst:stats response:operation.response error:error st:st];
-	                                             if (_converter != nil && (index+1 < ips.count || times>0) && needRetry(operation, error)) {
-
-	                                                     NSLog(@"idx: %d, count: %lu", index, (unsigned long)ips.count);
-	                                                     int nindex = index;
-	                                                     if (ips.count != 0)
-								     nindex = (index + 1) % ips.count;
-
-	                                                     [self sendRequest2:request withStats:nil withCompleteBlock:completeBlock withProgressBlock:progressBlock withCancelBlock:cancelBlock withIpArray:ips withIndex:nindex withDomain:domain withRetryTimes:times -1 withStartTime:startTime];
-	                                                     return;
-						     }
-	                                             double duration = [[NSDate date] timeIntervalSinceDate:startTime];
-	                                             QNResponseInfo *info = [QNHttpManager buildResponseInfo:operation withError:error withDuration:duration withResponse:operation.responseData withIp:ip];
-	                                             NSLog(@"failure %@", info);
-	                                             completeBlock(info, nil);
-					     }
-	                                    ];
-
-	__block AFHTTPRequestOperation *op = nil;
-	if (cancelBlock) {
-		op = operation;
-	}
-
-	[operation setUploadProgressBlock: ^(NSUInteger bytesWritten, long long totalBytesWritten, long long totalBytesExpectedToWrite) {
-	         if (stats && totalBytesWritten == totalBytesExpectedToWrite) {
-	                 double sendTime = [[NSDate date] timeIntervalSinceDate:st];
-	                 setStat(stats, @"snt", [NSNumber numberWithLongLong:(long long)(sendTime * 1000)]);
-		 }
-	         if (stats && request.HTTPBodyStream) {
-	                 setStat(stats, @"fs", [NSNumber numberWithLongLong:totalBytesWritten]);
-		 }
-	         if (progressBlock) {
-	                 progressBlock(totalBytesWritten, totalBytesExpectedToWrite);
-		 }
-	         if (cancelBlock) {
-	                 if (cancelBlock()) {
-	                         [op cancel];
-			 }
-	                 op = nil;
-		 }
-	 }];
-
-	[_httpManager.operationQueue addOperation:operation];
+    
+    NSURLSessionTask *operation = [self.httpManager dataTaskWithRequest:request completionHandler:^(NSURLResponse * _Nonnull response, id  _Nullable responseObject, NSError * _Nullable error) {
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        if (error) {
+            [self recordRst:stats response:httpResponse error:error st:st];
+            if (_converter != nil && (index+1 < ips.count || times>0) && needRetry(operation, error)) {
+                NSLog(@"idx: %d, count: %lu", index, (unsigned long)ips.count);
+                int nindex = index;
+                if (ips.count != 0) nindex = (index + 1) % ips.count;
+                [self sendRequest2:request withStats:nil withCompleteBlock:completeBlock withProgressBlock:progressBlock withCancelBlock:cancelBlock withIpArray:ips withIndex:nindex withDomain:domain withRetryTimes:times -1 withStartTime:startTime];
+                return;
+            }
+            double duration = [[NSDate date] timeIntervalSinceDate:startTime];
+            QNResponseInfo *info = [QNHttpManager buildResponseInfo:operation withError:error withDuration:duration withResponse:responseObject withIp:ip];
+            NSLog(@"failure %@", info);
+            completeBlock(info, nil);
+        } else {
+            double duration = [[NSDate date] timeIntervalSinceDate:startTime];
+            QNResponseInfo *info = [QNHttpManager buildResponseInfo:operation withError:nil withDuration:duration withResponse:responseObject withIp:ip];
+            NSDictionary *resp = nil;
+            if (info.isOK) {
+                resp = responseObject;
+            }
+            [self recordRst:stats response:httpResponse error:nil st:st];
+            completeBlock(info, resp);
+        }
+    }];
+    
+    __block NSURLSessionTask *op = nil;
+    if (cancelBlock) {
+        op = operation;
+    }
+    
+    [self.httpManager setTaskDidSendBodyDataBlock:^(NSURLSession * _Nonnull session, NSURLSessionTask * _Nonnull task, int64_t bytesSent, int64_t totalBytesSent, int64_t totalBytesExpectedToSend) {
+        if (stats && totalBytesSent == totalBytesExpectedToSend) {
+            double sendTime = [[NSDate date] timeIntervalSinceDate:st];
+            setStat(stats, @"snt", [NSNumber numberWithLongLong:(long long)(sendTime * 1000)]);
+        } if (stats && request.HTTPBodyStream) {
+            setStat(stats, @"fs", [NSNumber numberWithLongLong:totalBytesSent]);
+        } if (progressBlock) {
+            progressBlock(totalBytesSent, totalBytesExpectedToSend);
+        } if (cancelBlock) {
+            if (cancelBlock()) {
+                [op cancel];
+            }
+            op = nil;
+        }
+    }];
+    
+    [operation resume];
 }
 
 - (void)      sendRequest:(NSMutableURLRequest *)request

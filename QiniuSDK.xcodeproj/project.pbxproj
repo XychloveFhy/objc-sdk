@@ -504,6 +504,7 @@
 				DF2CDE0719DAC05500CE01FB /* Frameworks */,
 				DF2CDE0819DAC05500CE01FB /* Resources */,
 				89DB25D6138DE224B6792894 /* Copy Pods Resources */,
+				BA0BB2BC750E3531AF6C5E14 /* Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -542,6 +543,7 @@
 				DF2CDE2119DAC08400CE01FB /* Frameworks */,
 				DF2CDE2219DAC08400CE01FB /* Resources */,
 				A98F1AAF0833E00FD9DB35A9 /* Copy Pods Resources */,
+				7E083D1E60782B38139891ED /* Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -658,6 +660,21 @@
 			shellScript = "diff \"${PODS_ROOT}/../Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [[ $? != 0 ]] ; then\n    cat << EOM\nerror: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\nEOM\n    exit 1\nfi\n";
 			showEnvVarsInLog = 0;
 		};
+		7E083D1E60782B38139891ED /* Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Pods Frameworks";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/Pods/Target Support Files/Pods-QiniuSDK iOSTests/Pods-QiniuSDK iOSTests-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 		89DB25D6138DE224B6792894 /* Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -716,6 +733,21 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${SRCROOT}/Pods/Target Support Files/Pods-QiniuSDK iOS/Pods-QiniuSDK iOS-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		BA0BB2BC750E3531AF6C5E14 /* Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Pods Frameworks";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/Pods/Target Support Files/Pods-QiniuSDK MacTests/Pods-QiniuSDK MacTests-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		E79DAA00C82CEAE05AF2CC18 /* Check Pods Manifest.lock */ = {
